@@ -19,7 +19,10 @@ Frontend: **React + Vite**
 
 ```
 Graia/
-├── backend/                 # Python FastAPI service
+├── .github/
+│   └── workflows/
+│       └── ci.yml            # GitHub Actions: backend + frontend tests on push/PR
+├── backend/                  # Python FastAPI service
 │   ├── app/
 │   │   ├── main.py          # FastAPI app + endpoints
 │   │   ├── config.py        # env config
@@ -33,7 +36,10 @@ Graia/
 └── frontend/                # React + Vite web app
     ├── src/
     │   ├── App.jsx
-    │   └── CityAutocomplete.jsx   # reusable autocomplete component
+    │   ├── App.test.jsx           # unit tests
+    │   ├── CityAutocomplete.jsx   # reusable autocomplete component
+    │   ├── CityAutocomplete.test.jsx
+    │   └── test/setup.js          # Vitest setup
     └── .env.example
 ```
 
