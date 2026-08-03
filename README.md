@@ -181,18 +181,15 @@ recommended upgrades.
 
 ### Where we are and what's next
 
-1. ✅ Done: `GroqAssistant` in `backend/app/assistant.py` wraps a LangChain
-   `ChatGroq` instance, keeping the same `AssistantResponse` schema, so the API
-   contract is unchanged. Tests cover it with a `FakeListChatModel`.
-2. Add LangGraph only when the flow needs state (multi-day planning, follow-up
+1. Add LangGraph only when the flow needs state (multi-day planning, follow-up
    questions). Start with a single-node graph wrapping the current logic; add
    nodes later without changing the endpoint.
-3. Consider `uv_index` and air-quality data from OpenWeatherMap's One Call API
+2. Consider `uv_index` and air-quality data from OpenWeatherMap's One Call API
    (paid tier) for richer advice (sunscreen/UV warnings, AQI for sensitive
    users).
-4. Alerting: trigger a push/email when conditions match user preferences
+3. Alerting: trigger a push/email when conditions match user preferences
    (e.g. "rain > 50% on my commute").
-5. i18n: recommendations in the user's language via the `language` query param.
-6. Caching the 5-day forecast per city to stay comfortably under the free-tier
+4. i18n: recommendations in the user's language via the `language` query param.
+5. Caching the 5-day forecast per city to stay comfortably under the free-tier
    call limit.
 

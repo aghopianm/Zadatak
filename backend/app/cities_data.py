@@ -1,7 +1,6 @@
 """Static world city dataset for autocomplete.
 
-Generated from the GeoNames cities15000 dataset
-(https://download.geonames.org/export/dump/) and GeoNames countryInfo.
+Generated from the GeoNames cities15000 dataset.
 """
 
 COUNTRY_NAMES = {
@@ -259,7 +258,7 @@ COUNTRY_NAMES = {
     'ZW': 'Zimbabwe',
 }
 
-# (name, ascii_name, country_code) for major world cities (pop >= 150k)
+# (name, ascii_name, country_code)
 CITIES = [
     ('Shanghai', 'Shanghai', 'CN'),
     ('Beijing', 'Beijing', 'CN'),
