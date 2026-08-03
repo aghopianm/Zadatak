@@ -74,6 +74,15 @@ pytest -q
 
 The tests mock both external APIs, so they run without keys.
 
+### Frontend tests
+
+```bash
+cd frontend
+npm test
+```
+
+Unit tests (Vitest + Testing Library, jsdom) cover the `App` flow (render, submit → results, error handling) and the `CityAutocomplete` component (debounced fetch, selection, keyboard dismissal). No backend or network needed.
+
 ## Frontend setup
 
 ```bash

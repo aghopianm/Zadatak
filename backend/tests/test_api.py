@@ -1,12 +1,13 @@
 from datetime import date, datetime, timedelta, timezone
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from app.assistant import GroqAssistant, build_messages
 from app.main import app
 from app.schemas import WeatherInfo
-from app.weather import OpenWeatherClient
+from app.weather import OpenWeatherClient, WeatherError
 
 
 @pytest.fixture
@@ -115,8 +116,74 @@ class TestWeatherClient:
             client.fetch_weather_for_date("Zagreb", date.today())
         assert "not configured" in str(exc.value)
 
+    def test_get_unauthorized_key(self, monkeypatch):
+        class FakeResponse:
+            status_code = 401
+            text = '{"message": "Invalid API key."}'
+
+        monkeypatch.setattr(httpx.Client, "get", lambda *a, **k: FakeResponse())
+        with pytest.raises(WeatherError) as exc:
+            OpenWeatherClient(api_key="bad")._get("weather", {"q": "Zagreb"})
+        assert exc.value.status_code == 500
+        assert "Invalid OpenWeatherMap API key" in str(exc.value)
+
+    def test_get_city_not_found(self, monkeypatch):
+        class FakeResponse:
+            status_code = 404
+            text = '{"message": "city not found"}'
+
+        monkeypatch.setattr(httpx.Client, "get", lambda *a, **k: FakeResponse())
+        with pytest.raises(WeatherError) as exc:
+            OpenWeatherClient(api_key="ok")._get("weather", {"q": "Nope"})
+        assert exc.value.status_code == 404
+
+    def test_get_upstream_error(self, monkeypatch):
+        class FakeResponse:
+            status_code = 502
+            text = "bad gateway"
+
+        monkeypatch.setattr(httpx.Client, "get", lambda *a, **k: FakeResponse())
+        with pytest.raises(WeatherError) as exc:
+            OpenWeatherClient(api_key="ok")._get("forecast", {"q": "Zagreb"})
+        assert exc.value.status_code == 502
+        assert "bad gateway" in str(exc.value)
+
+    def test_get_returns_json_on_success(self, monkeypatch):
+        class FakeResponse:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {"cod": 200, "main": {"temp": 20.0}}
+
+        monkeypatch.setattr(httpx.Client, "get", lambda *a, **k: FakeResponse())
+        result = OpenWeatherClient(api_key="ok")._get("weather", {"q": "Zagreb"})
+        assert result["main"]["temp"] == 20.0
+
+    def test_forecast_date_not_available(self, monkeypatch):
+        def fake_get(self, path, params):
+            payload = forecast_payload()
+            payload["list"] = []
+            return payload
+
+        monkeypatch.setattr(OpenWeatherClient, "_get", fake_get)
+        client = OpenWeatherClient(api_key="test-key")
+        with pytest.raises(WeatherError) as exc:
+            client.fetch_weather_for_date("Zagreb", date(2026, 8, 5))
+        assert exc.value.status_code == 404
+        assert "No forecast data available" in str(exc.value)
+
 
 class TestGeocode:
+    def test_geocode_empty_query(self):
+        client = OpenWeatherClient(api_key="test-key")
+        assert client.geocode("   ") == []
+
+    def test_geocode_exact_match_first(self):
+        client = OpenWeatherClient(api_key="test-key")
+        results = client.geocode("Zagreb")
+        assert results[0].label == "Zagreb, Croatia"
+
     def test_geocode_prefix_matching(self):
         client = OpenWeatherClient(api_key="test-key")
         results = client.geocode("Zag")
@@ -166,6 +233,23 @@ class TestGroqAssistant:
         with pytest.raises(Exception) as exc:
             assistant.recommend(make_weather())
         assert "not configured" in str(exc.value)
+
+    def test_llm_failure_mapped_to_groq_error(self):
+        class FailingLLM:
+            def invoke(self, messages):
+                raise RuntimeError("connection refused")
+
+        assistant = GroqAssistant(api_key="test-key", llm=FailingLLM())
+        with pytest.raises(Exception) as exc:
+            assistant.recommend(make_weather())
+        assert "connection refused" in str(exc.value)
+        assert exc.value.status_code == 502
+
+    def test_parse_falls_back_on_non_json(self):
+        assistant = GroqAssistant(api_key="test-key")
+        result = assistant._parse("Just some plain text reply")
+        assert result.summary == "Just some plain text reply"
+        assert result.clothing == ""
 
     def test_langchain_fake_model_end_to_end(self):
         from langchain_core.language_models.fake_chat_models import FakeListChatModel
@@ -230,3 +314,32 @@ class TestRecommendationEndpoint:
         body = response.json()
         assert body["weather"]["city"] == "Zagreb"
         assert body["assistant"]["summary"] == "Sunny and mild."
+
+    def test_groq_error_mapped_to_502(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "app.main.OpenWeatherClient.fetch_weather_for_date",
+            lambda *a, **k: make_weather(),
+        )
+
+        class _FailingAssistant:
+            def recommend(self, weather):
+                from app.assistant import GroqError
+
+                raise GroqError("Groq API error (500): boom", 502)
+
+        monkeypatch.setattr("app.main.GroqAssistant", lambda *a, **k: _FailingAssistant())
+        response = client.get(
+            "/api/recommendation",
+            params={"city": "Zagreb", "date": "2026-08-04"},
+        )
+        assert response.status_code == 502
+        assert "boom" in response.json()["detail"]
+
+    def test_cities_endpoint_weather_error(self, client, monkeypatch):
+        def _fail(self, q, limit):
+            raise WeatherError("Geocoding broken", 502)
+
+        monkeypatch.setattr("app.main.OpenWeatherClient.geocode", _fail)
+        response = client.get("/api/cities", params={"q": "Za"})
+        assert response.status_code == 502
+        assert response.json()["detail"] == "Geocoding broken"
