@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
+from app.assistant import GroqAssistant, build_messages
 from app.main import app
 from app.schemas import WeatherInfo
 from app.weather import OpenWeatherClient
@@ -148,6 +149,42 @@ class TestGeocode:
         response = client.get("/api/cities", params={"q": "Za"})
         assert response.status_code == 200
         assert response.json()[0]["q"] == "Zagreb,HR"
+
+
+class TestGroqAssistant:
+    def test_parse_handles_json(self):
+        assistant = GroqAssistant(api_key="test-key")
+        result = assistant._parse(
+            '{"summary": "Sunny.", "clothing": "T-shirt", '
+            '"activities": "Walk", "precautions": "Sunscreen"}'
+        )
+        assert result.summary == "Sunny."
+        assert result.clothing == "T-shirt"
+
+    def test_missing_key_rejected(self):
+        assistant = GroqAssistant(api_key="")
+        with pytest.raises(Exception) as exc:
+            assistant.recommend(make_weather())
+        assert "not configured" in str(exc.value)
+
+    def test_langchain_fake_model_end_to_end(self):
+        from langchain_core.language_models.fake_chat_models import FakeListChatModel
+
+        fake = FakeListChatModel(
+            responses=[
+                '{"summary": "Warm.", "clothing": "Light", '
+                '"activities": "Cycle", "precautions": "Hydrate"}'
+            ]
+        )
+        assistant = GroqAssistant(api_key="test-key", llm=fake)
+        result = assistant.recommend(make_weather())
+        assert result.summary == "Warm."
+        assert result.activities == "Cycle"
+
+    def test_messages_built_for_weather(self):
+        messages = build_messages(make_weather())
+        assert "Zagreb" in messages[1].content
+        assert messages[0].type == "system"
 
 
 class TestRecommendationEndpoint:

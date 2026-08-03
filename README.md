@@ -26,7 +26,7 @@ Graia/
 │   │   ├── schemas.py       # Pydantic models
 │   │   ├── weather.py       # OpenWeatherMap client + city autocomplete
 │   │   ├── cities_data.py   # Bundled GeoNames dataset (1989 major cities)
-│   │   └── assistant.py     # Groq LLM client
+│   │   └── assistant.py     # Groq LLM client (LangChain ChatGroq)
 │   ├── tests/               # pytest suite (mocked external APIs)
 │   ├── requirements.txt
 │   └── .env.example
@@ -158,11 +158,12 @@ The `q` field is the exact value to pass as `city` to `/api/recommendation`.
 
 ## Future expansion
 
-The current implementation deliberately keeps the LLM call as a single, direct HTTP
-request to Groq. That keeps the dependency tree small, startup fast, and the code
-easy to review. When the app grows, these are the recommended upgrades.
+The LLM layer currently uses LangChain's `ChatGroq` wrapper over a single prompt
+(no chains, no agents, no graph). That keeps the flow simple while giving us the
+portability and tool-calling options below. When the app grows, these are the
+recommended upgrades.
 
-### When to adopt LangChain
+### When to use more of LangChain
 
 - **Tool use / function calling** — if the assistant should ask the user
   follow-up questions, look up more data, or act on the recommendations (e.g.
@@ -178,26 +179,20 @@ easy to review. When the app grows, these are the recommended upgrades.
 - **Streaming conversations** — if you want a chat UI that streams tokens to the
   frontend, LangChain adds streaming abstractions out of the box.
 
-### Proposed migration path
+### Where we are and what's next
 
-1. Keep the existing `OpenWeatherClient` as-is; it is a thin, framework-agnostic
-   adapter.
-2. Replace `GroqAssistant` in `backend/app/assistant.py` with a LangChain
-   `ChatGroq` instance, keeping the same `AssistantResponse` schema so the API
-   contract does not change.
-3. Add LangGraph only when the flow needs state (multi-day planning, follow-up
+1. ✅ Done: `GroqAssistant` in `backend/app/assistant.py` wraps a LangChain
+   `ChatGroq` instance, keeping the same `AssistantResponse` schema, so the API
+   contract is unchanged. Tests cover it with a `FakeListChatModel`.
+2. Add LangGraph only when the flow needs state (multi-day planning, follow-up
    questions). Start with a single-node graph wrapping the current logic; add
    nodes later without changing the endpoint.
-4. Add tests for the LangChain layer with a fake model (e.g. `FakeListChatModel`)
-   so the mock-based test suite keeps working without network calls.
-
-### Suggested features
-
-- `uv_index` and air-quality data from OpenWeatherMap's One Call API (paid tier)
-  for richer advice (sunscreen/UV warnings, AQI for sensitive users).
-- Alerting: trigger a push/email when conditions match user preferences
-  (e.g. "rain > 50% on my commute").
-- i18n: recommendations in the user's language via the `language` query param.
-- Caching the 5-day forecast per city to stay comfortably under the free-tier
-  call limit.
+3. Consider `uv_index` and air-quality data from OpenWeatherMap's One Call API
+   (paid tier) for richer advice (sunscreen/UV warnings, AQI for sensitive
+   users).
+4. Alerting: trigger a push/email when conditions match user preferences
+   (e.g. "rain > 50% on my commute").
+5. i18n: recommendations in the user's language via the `language` query param.
+6. Caching the 5-day forecast per city to stay comfortably under the free-tier
+   call limit.
 

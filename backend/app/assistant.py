@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 
-import httpx
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_groq import ChatGroq
 
-from .config import GROQ_API_KEY, GROQ_BASE_URL, GROQ_MODEL
+from .config import GROQ_API_KEY, GROQ_MODEL
 from .schemas import AssistantResponse, WeatherInfo
 
 
@@ -37,46 +38,43 @@ def _build_user_prompt(weather: WeatherInfo) -> str:
     )
 
 
-class GroqAssistant:
-    """LLM client that turns weather data into recommendations via Groq."""
+def build_messages(weather: WeatherInfo) -> list:
+    return [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=_build_user_prompt(weather)),
+    ]
 
-    def __init__(self, api_key: str = GROQ_API_KEY, model: str = GROQ_MODEL):
-        self.api_key = api_key
+
+class GroqAssistant:
+    """LLM client that turns weather data into recommendations via LangChain ChatGroq."""
+
+    def __init__(
+        self,
+        api_key: str = GROQ_API_KEY,
+        model: str = GROQ_MODEL,
+        llm: ChatGroq | None = None,
+    ):
+        self.api_key = api_key or ""
         self.model = model
+        self._llm = llm  # optional injected instance (used in tests)
 
     def recommend(self, weather: WeatherInfo) -> AssistantResponse:
         if not self.api_key:
             raise GroqError("GROQ_API_KEY is not configured.", 500)
-        body = {
-            "model": self.model,
-            "temperature": 0.4,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _build_user_prompt(weather)},
-            ],
-            "response_format": {"type": "json_object"},
-        }
+        llm = self._llm or self._build_llm()
         try:
-            with httpx.Client(timeout=60.0) as client:
-                response = client.post(
-                    f"{GROQ_BASE_URL}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=body,
-                )
-        except httpx.HTTPError as exc:
-            raise GroqError(f"Groq request failed: {exc}", 502)
+            response = llm.invoke(build_messages(weather))
+        except Exception as exc:
+            raise GroqError(f"Groq request failed: {exc}", 502) from exc
+        return self._parse(response.content)
 
-        if response.status_code != 200:
-            raise GroqError(
-                f"Groq API error ({response.status_code}): {response.text[:200]}",
-                502,
-            )
-
-        content = response.json()["choices"][0]["message"]["content"]
-        return self._parse(content)
+    def _build_llm(self) -> ChatGroq:
+        return ChatGroq(
+            model_name=self.model,
+            groq_api_key=self.api_key,
+            temperature=0.4,
+            model_kwargs={"response_format": {"type": "json_object"}},
+        )
 
     def _parse(self, content: str) -> AssistantResponse:
         try:
