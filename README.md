@@ -40,7 +40,7 @@ Graia/
 ## Prerequisites
 
 - Python 3.11+ (recommended; tested with 3.12)
-- Node.js 18+
+- Node.js 22.22+ (required by Vite 8 / jsdom 30; local dev on Node 26 works)
 - Free API keys:
   - [OpenWeatherMap](https://home.openweathermap.org/api_keys) (up to 1000 calls/day)
   - [Groq](https://console.groq.com/keys) (free tier)
