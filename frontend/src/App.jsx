@@ -74,7 +74,7 @@ function App() {
       </form>
 
       <small className="hint">
-        Date must be today or within the next 5 days.
+        Date must be today or within the next 5 days (free OpenWeatherMap tier).
       </small>
 
       {error && <div className="error">⚠️ {error}</div>}
