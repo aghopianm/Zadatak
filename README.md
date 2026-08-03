@@ -133,5 +133,50 @@ curl "http://127.0.0.1:8000/api/health"
 | ----------------------- | ----------- | -------------------------------------------- |
 | `OPENWEATHERMAP_API_KEY`| `backend/.env` | OpenWeatherMap API key                   |
 | `GROQ_API_KEY`          | `backend/.env` | Groq API key                             |
-| `GROQ_MODEL`            | `backend/.env` | Groq model id (default `llama-3.3-70b-versatile`) |
 | `VITE_API_BASE`         | `frontend/.env` | Optional override for the backend base URL |
+
+## Future expansion
+
+The current implementation deliberately keeps the LLM call as a single, direct HTTP
+request to Groq. That keeps the dependency tree small, startup fast, and the code
+easy to review. When the app grows, these are the recommended upgrades.
+
+### When to adopt LangChain
+
+- **Tool use / function calling** — if the assistant should ask the user
+  follow-up questions, look up more data, or act on the recommendations (e.g.
+  "book the best match of these activities"), LangChain's tool-calling support
+  handles the orchestration cleanly.
+- **Multi-step workflows** — e.g. compare several cities or build a multi-day
+  itinerary. LangGraph is the right fit here because each step (fetch weather →
+  analyze → plan day N+1) is a node in a stateful graph with its own prompt and
+  memory.
+- **Model/provider portability** — LangChain's `ChatGroq` gives you the option to
+  swap the model provider (OpenAI, Anthropic, local models) without rewriting the
+  prompt layer.
+- **Streaming conversations** — if you want a chat UI that streams tokens to the
+  frontend, LangChain adds streaming abstractions out of the box.
+
+### Proposed migration path
+
+1. Keep the existing `OpenWeatherClient` as-is; it is a thin, framework-agnostic
+   adapter.
+2. Replace `GroqAssistant` in `backend/app/assistant.py` with a LangChain
+   `ChatGroq` instance, keeping the same `AssistantResponse` schema so the API
+   contract does not change.
+3. Add LangGraph only when the flow needs state (multi-day planning, follow-up
+   questions). Start with a single-node graph wrapping the current logic; add
+   nodes later without changing the endpoint.
+4. Add tests for the LangChain layer with a fake model (e.g. `FakeListChatModel`)
+   so the mock-based test suite keeps working without network calls.
+
+### Suggested features
+
+- `uv_index` and air-quality data from OpenWeatherMap's One Call API (paid tier)
+  for richer advice (sunscreen/UV warnings, AQI for sensitive users).
+- Alerting: trigger a push/email when conditions match user preferences
+  (e.g. "rain > 50% on my commute").
+- i18n: recommendations in the user's language via the `language` query param.
+- Caching the 5-day forecast per city to stay comfortably under the free-tier
+  call limit.
+
