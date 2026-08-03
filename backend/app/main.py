@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .assistant import GroqAssistant, GroqError
 from .config import GROQ_API_KEY, OPENWEATHER_API_KEY
-from .schemas import ErrorResponse, HealthResponse, Recommendation
+from .schemas import CitySuggestion, ErrorResponse, HealthResponse, Recommendation
 from .weather import OpenWeatherClient, WeatherError
 
 app = FastAPI(
@@ -36,6 +36,22 @@ def health() -> HealthResponse:
         weather_api_configured=bool(OPENWEATHER_API_KEY),
         groq_api_configured=bool(GROQ_API_KEY),
     )
+
+
+@app.get(
+    "/api/cities",
+    response_model=list[CitySuggestion],
+    summary="Autocomplete city names (OpenWeatherMap geocoding)",
+)
+def cities(
+    q: str = Query(..., min_length=1, description="Partial city name, e.g. 'Za'"),
+    limit: int = Query(5, ge=1, le=10),
+) -> list[CitySuggestion]:
+    client = OpenWeatherClient()
+    try:
+        return client.geocode(q, limit)
+    except WeatherError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
 
 
 @app.get(

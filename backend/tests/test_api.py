@@ -115,6 +115,41 @@ class TestWeatherClient:
         assert "not configured" in str(exc.value)
 
 
+class TestGeocode:
+    def test_geocode_prefix_matching(self):
+        client = OpenWeatherClient(api_key="test-key")
+        results = client.geocode("Zag")
+        assert results[0].label == "Zagreb, Croatia"
+        assert results[0].q == "Zagreb,HR"
+
+    def test_geocode_partial_prefix_found(self):
+        client = OpenWeatherClient(api_key="test-key")
+        labels = [r.label for r in client.geocode("Za", limit=20)]
+        assert "Zagreb, Croatia" in labels
+
+    def test_geocode_contains_fallback(self):
+        client = OpenWeatherClient(api_key="test-key")
+        results = client.geocode("york")
+        assert any(r.q == "New York City,US" for r in results)
+
+    def test_cities_endpoint(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "app.main.OpenWeatherClient.geocode",
+            lambda *a, **k: [
+                {
+                    "name": "Zagreb",
+                    "country": "HR",
+                    "country_name": "Croatia",
+                    "label": "Zagreb, Croatia",
+                    "q": "Zagreb,HR",
+                }
+            ],
+        )
+        response = client.get("/api/cities", params={"q": "Za"})
+        assert response.status_code == 200
+        assert response.json()[0]["q"] == "Zagreb,HR"
+
+
 class TestRecommendationEndpoint:
     def test_health_reports_config(self, client):
         response = client.get("/api/health")

@@ -5,7 +5,8 @@ from datetime import date, datetime, timezone
 import httpx
 
 from .config import OPENWEATHER_API_KEY, OPENWEATHER_BASE_URL
-from .schemas import WeatherInfo
+from .cities_data import CITIES, COUNTRY_NAMES
+from .schemas import CitySuggestion, WeatherInfo
 
 
 class WeatherError(Exception):
@@ -112,3 +113,37 @@ class OpenWeatherClient:
             rain_pct=round(rain_pct),
             uv_index=None,
         )
+
+    def geocode(self, query: str, limit: int = 5) -> list[CitySuggestion]:
+        """Autocomplete city names from the bundled GeoNames dataset."""
+        q = query.strip().lower()
+        if not q:
+            return []
+        matches = []
+        for name, ascii_name, cc in CITIES:
+            lowered = name.lower()
+            ascii_lowered = ascii_name.lower()
+            if lowered == q or ascii_lowered == q:
+                score = 0
+            elif lowered.startswith(q) or ascii_lowered.startswith(q):
+                score = 1
+            elif q in lowered or q in ascii_lowered:
+                score = 2
+            else:
+                continue
+            matches.append((score, name, cc))
+        matches.sort(key=lambda m: m[0])
+
+        suggestions = []
+        for _, name, cc in matches[:limit]:
+            country_name = COUNTRY_NAMES.get(cc, cc)
+            suggestions.append(
+                CitySuggestion(
+                    name=name,
+                    country=cc,
+                    country_name=country_name,
+                    label=f"{name}, {country_name}",
+                    q=f"{name},{cc}",
+                )
+            )
+        return suggestions

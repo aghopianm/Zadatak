@@ -8,6 +8,7 @@ Frontend: **React + Vite**
 ## Features
 
 - Input a city and a date
+- City autocomplete with a bundled world-cities dataset (type `Zag` → "Zagreb, Croatia"); no extra API calls or rate limits
 - Fetches current weather (today) or the day's forecast (next 5 days) from OpenWeatherMap
 - Sends the weather data to a Groq LLM (free tier) and receives structured recommendations
 - Clean dark-themed web UI; also a REST API you can call from a CLI
@@ -23,13 +24,16 @@ Graia/
 │   │   ├── main.py          # FastAPI app + endpoints
 │   │   ├── config.py        # env config
 │   │   ├── schemas.py       # Pydantic models
-│   │   ├── weather.py       # OpenWeatherMap client
+│   │   ├── weather.py       # OpenWeatherMap client + city autocomplete
+│   │   ├── cities_data.py   # Bundled GeoNames dataset (1989 major cities)
 │   │   └── assistant.py     # Groq LLM client
 │   ├── tests/               # pytest suite (mocked external APIs)
 │   ├── requirements.txt
 │   └── .env.example
 └── frontend/                # React + Vite web app
-    ├── src/App.jsx
+    ├── src/
+    │   ├── App.jsx
+    │   └── CityAutocomplete.jsx   # reusable autocomplete component
     └── .env.example
 ```
 
@@ -126,6 +130,23 @@ Example response:
 ```bash
 curl "http://127.0.0.1:8000/api/health"
 ```
+
+### City autocomplete
+
+```bash
+curl "http://127.0.0.1:8000/api/cities?q=Zag&limit=5"
+```
+
+```json
+[
+  { "name": "Zagreb", "country": "HR", "country_name": "Croatia",
+    "label": "Zagreb, Croatia", "q": "Zagreb,HR" },
+  { "name": "Zagazig", "country": "EG", "country_name": "Egypt",
+    "label": "Zagazig, Egypt", "q": "Zagazig,EG" }
+]
+```
+
+The `q` field is the exact value to pass as `city` to `/api/recommendation`.
 
 ## Configuration reference
 

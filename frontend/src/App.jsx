@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import CityAutocomplete from './CityAutocomplete'
 import './App.css'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
@@ -50,12 +51,10 @@ function App() {
       <form className="form" onSubmit={fetchRecommendation}>
         <label>
           City
-          <input
-            type="text"
+          <CityAutocomplete
             value={city}
-            onChange={(e) => setCity(e.target.value)}
+            onChange={setCity}
             placeholder="e.g. Zagreb"
-            required
           />
         </label>
         <label>

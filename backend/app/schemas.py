@@ -32,6 +32,14 @@ class Recommendation(BaseModel):
     assistant: AssistantResponse
 
 
+class CitySuggestion(BaseModel):
+    name: str
+    country: str
+    country_name: str
+    label: str
+    q: str = Field(description="Value to use as the city in /api/recommendation")
+
+
 class HealthResponse(BaseModel):
     status: str
     weather_api_configured: bool
