@@ -163,6 +163,55 @@ curl "http://127.0.0.1:8000/api/cities?q=Zag&limit=5"
 
 The `q` field is the exact value to pass as `city` to `/api/recommendation`.
 
+## Data flow
+
+What the app actually extracts and passes between the two APIs.
+
+### 1. From OpenWeatherMap → `WeatherInfo`
+
+| Field | Source | Notes |
+| --- | --- | --- |
+| `city`, `country` | response `name` + `sys.country` | |
+| `temperature_c` | `main.temp` | for a forecast date: mean of the day's 8 (3-hourly) entries |
+| `feels_like_c` | `main.feels_like` | |
+| `humidity_pct` | `main.humidity` | forecast: max of the day |
+| `wind_speed_mps` | `wind.speed` | forecast: max of the day |
+| `pressure_hpa` | `main.pressure` | from the noon-ish entry |
+| `condition`, `description` | `weather[0].main` / `weather[0].description` | forecast: from the entry nearest 12:00 |
+| `rain_pct` | forecast `pop` × 100 | `null` for current weather (not provided) |
+| `uv_index` | — | always `null`; UV data requires the paid One Call API |
+
+### 2. From our app → Groq LLM
+
+A single system prompt ("answer in JSON with exactly: summary, clothing,
+activities, precautions") plus a user prompt with the `WeatherInfo` fields above:
+city, country, date, condition/description, temp, feels-like, humidity, wind,
+pressure, chance of rain. Model params: `temperature=0.4`,
+`response_format={"type": "json_object"}`.
+
+### 3. From Groq → `AssistantResponse`
+
+```json
+{
+  "summary": "A very hot day with clear skies.",
+  "clothing": "Wear lightweight, light-colored clothing.",
+  "activities": "Outdoor activity in the early morning or evening.",
+  "precautions": "Stay hydrated and use sunscreen."
+}
+```
+
+### What we could extend later
+
+- **Free-tier fields we already receive but currently drop**: `weather[0].icon`
+  (OpenWeatherMap weather images), `clouds.all` (cover %), `visibility`,
+  `main.temp_min`/`temp_max`, `wind.gust`/`wind.deg`, `rain`/`snow`,
+  `sys.sunrise`/`sys.sunset`. All easy to add to `WeatherInfo` and pass to the LLM.
+- **Free API we don't call yet**: the [Air Pollution API](https://openweathermap.org/api/air-pollution)
+  (`/data/2.5/air_pollution`) for AQI + pollutant concentrations — useful for
+  sensitive-user advice.
+- **Paid only**: UV index and historical/minutely/hourly data require the One
+  Call API; the free tier maxes out at current weather + 5-day forecast.
+
 ## Configuration reference
 
 | Variable                | Where       | Description                                  |
